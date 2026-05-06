@@ -38,7 +38,9 @@ def read_lines(file_path: str) -> list[str]:
     with open(file_path, "r", encoding="utf-8") as f:
         lines = [line.strip() for line in f.readlines()]
 
-    lines = [l for l in lines if l]  # 过滤空行
+    import re
+    # 过滤空行 + 无法朗读的符号行（如 ---、***、===）
+    lines = [l for l in lines if l and not re.fullmatch(r'[-=*#_/|\s]+', l)]
 
     if not lines:
         print("[错误] 文件内容为空")
