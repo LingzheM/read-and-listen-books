@@ -5,9 +5,6 @@
   python play.py chapter-5
   python play.py chapter-5 --gap 1
   python play.py           # 不带参数时列出可用章节
-
-依赖：
-  pip install playsound==1.2.2
 """
 
 import os
@@ -15,12 +12,36 @@ import sys
 import time
 import glob
 import argparse
-from playsound import playsound
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 
+# ─── 跨平台播放 ──────────────────────────────────────────────
+def play(path: str):
+
+    if sys.platform == "win32":
+        # 直接调用 Windows MCI 宽字符接口，不经过任何编码转换
+        import ctypes
+        winmm = ctypes.windll.winmm
+        alias = "tts_audio"
+        winmm.mciSendStringW(f'open "{path}" alias {alias}', None, 0, None)
+        winmm.mciSendStringW(f'play {alias} wait',           None, 0, None)
+        winmm.mciSendStringW(f'close {alias}',               None, 0, None)
+
+    elif sys.platform == "darwin":
+        os.system(f"afplay '{path}'")
+
+    else:
+        for player in ["aplay", "ffplay -nodisp -autoexit"]:
+            cmd = player.split()[0]
+            if os.system(f"which {cmd} > /dev/null 2>&1") == 0:
+                os.system(f"{player} '{path}' > /dev/null 2>&1")
+                return
+        print("[警告] 未找到可用播放器，请安装：sudo apt install alsa-utils")
+
+
+# ─── 工具函数 ────────────────────────────────────────────────
 def list_chapters():
     dirs = sorted([
         d for d in os.listdir(OUTPUT_DIR)
@@ -48,7 +69,6 @@ def get_wav_files(chapter: str) -> list[str]:
     if not files:
         print(f"[错误] output/{chapter}/ 下没有 WAV 文件")
         sys.exit(1)
-
     return files
 
 
@@ -57,6 +77,7 @@ def format_time(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+# ─── 主流程 ───────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="有声书播放器")
     parser.add_argument("chapter", nargs="?", help="章节名，如 chapter-5")
@@ -77,7 +98,7 @@ def main():
 
     for i, path in enumerate(files, start=1):
         print(f"[{i:>3}/{total}] {os.path.basename(path)}")
-        playsound(path)  # 阻塞播放，播完再播下一句
+        play(path)
         if args.gap > 0 and i < total:
             time.sleep(args.gap)
 
