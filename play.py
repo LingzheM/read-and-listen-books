@@ -1,10 +1,10 @@
 """
-有声书播放器 - 按顺序播放某章节的所有 WAV
+有声书播放器 - 按顺序播放某章节的所有音频
 
 用法：
   python play.py chapter-5
   python play.py chapter-5 --gap 1
-  python play.py           # 不带参数时列出可用章节
+  python play.py
 """
 
 import os
@@ -12,36 +12,32 @@ import sys
 import time
 import glob
 import argparse
+import subprocess
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 
-# ─── 跨平台播放 ──────────────────────────────────────────────
 def play(path: str):
-
     if sys.platform == "win32":
-        # 直接调用 Windows MCI 宽字符接口，不经过任何编码转换
         import ctypes
         winmm = ctypes.windll.winmm
-        alias = "tts_audio"
-        winmm.mciSendStringW(f'open "{path}" alias {alias}', None, 0, None)
-        winmm.mciSendStringW(f'play {alias} wait',           None, 0, None)
-        winmm.mciSendStringW(f'close {alias}',               None, 0, None)
+        # 指定 type mpegvideo，MCI 才能正确识别 MP3
+        winmm.mciSendStringW(f'open "{path}" type mpegvideo alias track', None, 0, None)
+        winmm.mciSendStringW('play track wait', None, 0, None)
+        winmm.mciSendStringW('close track', None, 0, None)
 
     elif sys.platform == "darwin":
-        os.system(f"afplay '{path}'")
+        subprocess.run(["afplay", path])
 
     else:
-        for player in ["aplay", "ffplay -nodisp -autoexit"]:
-            cmd = player.split()[0]
-            if os.system(f"which {cmd} > /dev/null 2>&1") == 0:
-                os.system(f"{player} '{path}' > /dev/null 2>&1")
+        for player in ["mpg123", "ffplay"]:
+            if subprocess.run(["which", player], capture_output=True).returncode == 0:
+                args = [player, path] if player == "mpg123" else ["ffplay", "-nodisp", "-autoexit", path]
+                subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
-        print("[警告] 未找到可用播放器，请安装：sudo apt install alsa-utils")
 
 
-# ─── 工具函数 ────────────────────────────────────────────────
 def list_chapters():
     dirs = sorted([
         d for d in os.listdir(OUTPUT_DIR)
@@ -53,21 +49,25 @@ def list_chapters():
     else:
         print("已生成章节：")
         for d in dirs:
-            count = len(glob.glob(os.path.join(OUTPUT_DIR, d, "*.wav")))
+            count = len(glob.glob(os.path.join(OUTPUT_DIR, d, "*.mp3"))) + \
+                    len(glob.glob(os.path.join(OUTPUT_DIR, d, "*.wav")))
             print(f"  · {d}  ({count} 句)")
     sys.exit(0)
 
 
-def get_wav_files(chapter: str) -> list[str]:
+def get_audio_files(chapter: str) -> list[str]:
     directory = os.path.join(OUTPUT_DIR, chapter)
     if not os.path.exists(directory):
         print(f"[错误] 找不到章节：output/{chapter}/")
         print(f"       请先运行：python main.py {chapter}")
         sys.exit(1)
 
-    files = sorted(glob.glob(os.path.join(directory, "*.wav")))
+    files = sorted(
+        glob.glob(os.path.join(directory, "*.mp3")) +
+        glob.glob(os.path.join(directory, "*.wav"))
+    )
     if not files:
-        print(f"[错误] output/{chapter}/ 下没有 WAV 文件")
+        print(f"[错误] output/{chapter}/ 下没有音频文件")
         sys.exit(1)
     return files
 
@@ -77,7 +77,6 @@ def format_time(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
-# ─── 主流程 ───────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="有声书播放器")
     parser.add_argument("chapter", nargs="?", help="章节名，如 chapter-5")
@@ -87,7 +86,7 @@ def main():
     if not args.chapter:
         list_chapters()
 
-    files = get_wav_files(args.chapter)
+    files = get_audio_files(args.chapter)
     total = len(files)
 
     print(f"─────────────────────────────────────")
