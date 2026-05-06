@@ -1,26 +1,22 @@
 """
-日语 TTS MVP - 基于 Edge-TTS
-逐行读取 sources/chapter-5.txt，一句一句合成并播放
+日语 TTS 生成器 - 将 sources/<章节>.txt 逐行合成为 WAV 保存到 output/<章节>/
 
 用法：
-  python jp_tts.py
-  python jp_tts.py --voice keita
-  python jp_tts.py --speed +20%
-  python jp_tts.py --no-play        # 只保存不播放
-  python jp_tts.py --file sources/chapter-3.txt  # 指定其他文件
+  python main.py chapter-5
+  python main.py chapter-5 --voice keita
+  python main.py chapter-5 --speed +20%
+  python main.py           # 不带参数时列出可用章节
 """
 
 import asyncio
 import argparse
 import os
 import sys
-import tempfile
+import re
 import edge_tts
 
-# ─── 默认配置 ─────────────────────────────────────────────────
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))  # 脚本所在目录
-DEFAULT_TXT = os.path.join(BASE_DIR, "sources", "chapter-5.txt")
-OUTPUT_DIR  = os.path.join(BASE_DIR, "output")           # 音频输出目录
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+SOURCES_DIR = os.path.join(BASE_DIR, "sources")
 
 VOICES = {
     "nanami": "ja-JP-NanamiNeural",  # 女声（默认）
@@ -29,7 +25,22 @@ VOICES = {
 DEFAULT_VOICE = VOICES["nanami"]
 
 
-# ─── 读取文本：按行分割，过滤空行 ────────────────────────────
+def list_chapters():
+    """列出 sources/ 下所有可用的 txt 章节"""
+    files = sorted([
+        os.path.splitext(f)[0]
+        for f in os.listdir(SOURCES_DIR)
+        if f.endswith(".txt")
+    ])
+    if not files:
+        print(f"[提示] sources/ 目录下还没有任何 txt 文件")
+    else:
+        print(f"可用章节：")
+        for f in files:
+            print(f"  · {f}")
+    sys.exit(0)
+
+
 def read_lines(file_path: str) -> list[str]:
     if not os.path.exists(file_path):
         print(f"[错误] 文件不存在：{file_path}")
@@ -38,75 +49,55 @@ def read_lines(file_path: str) -> list[str]:
     with open(file_path, "r", encoding="utf-8") as f:
         lines = [line.strip() for line in f.readlines()]
 
-    import re
-    # 过滤空行 + 无法朗读的符号行（如 ---、***、===）
+    # 过滤空行 + 纯符号行（如 ---、===、***）
     lines = [l for l in lines if l and not re.fullmatch(r'[-=*#_/|\s]+', l)]
 
     if not lines:
-        print("[错误] 文件内容为空")
+        print("[错误] 文件内容为空或全部是符号行")
         sys.exit(1)
 
     return lines
 
 
-# ─── 合成单句 ────────────────────────────────────────────────
 async def synthesize_line(text: str, voice: str, rate: str, output_path: str):
     communicate = edge_tts.Communicate(text, voice=voice, rate=rate)
     await communicate.save(output_path)
 
 
-# ─── 跨平台播放 ──────────────────────────────────────────────
-def play_audio(path: str):
-    if sys.platform == "darwin":
-        os.system(f"afplay '{path}'")
-    elif sys.platform == "win32":
-        os.system(f'start /wait "" "{path}"')
-    else:
-        for player in ["mpg123", "ffplay -nodisp -autoexit", "aplay"]:
-            if os.system(f"which {player.split()[0]} > /dev/null 2>&1") == 0:
-                os.system(f"{player} '{path}' > /dev/null 2>&1")
-                return
-        print("[警告] 未找到可用播放器，请手动打开音频文件")
-
-
-# ─── 主流程 ───────────────────────────────────────────────────
 async def main():
-    parser = argparse.ArgumentParser(description="日语逐行 TTS（Edge-TTS）")
-    parser.add_argument("--file",    default=DEFAULT_TXT,       help="文本文件路径（默认：sources/chapter-5.txt）")
-    parser.add_argument("--voice",   default=DEFAULT_VOICE,     help="音色：nanami（女）/ keita（男）（默认：nanami）")
-    parser.add_argument("--speed",   default="+0%",             help="语速，如 +20%% / -20%%（默认：+0%%）")
-    parser.add_argument("--no-play", action="store_true",       help="只保存音频，不播放")
+    parser = argparse.ArgumentParser(description="日语逐行 TTS 生成器")
+    parser.add_argument("chapter", nargs="?", help="章节名，如 chapter-5（对应 sources/chapter-5.txt）")
+    parser.add_argument("--voice", default=DEFAULT_VOICE, help="音色：nanami（女）/ keita（男）")
+    parser.add_argument("--speed", default="+0%",         help="语速，如 +20%% / -20%%")
     args = parser.parse_args()
 
-    voice = VOICES.get(args.voice, args.voice)
-    lines = read_lines(args.file)
+    # 不带参数时列出可用章节
+    if not args.chapter:
+        list_chapters()
 
-    # 创建输出目录
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    chapter     = args.chapter
+    input_path  = os.path.join(SOURCES_DIR, f"{chapter}.txt")
+    output_dir  = os.path.join(BASE_DIR, "output", chapter)
+    voice       = VOICES.get(args.voice, args.voice)
 
-    chapter_name = os.path.splitext(os.path.basename(args.file))[0]
+    os.makedirs(output_dir, exist_ok=True)
+
+    lines = read_lines(input_path)
 
     print(f"─────────────────────────────────────")
-    print(f" 文件：{args.file}")
+    print(f" 章节：{chapter}  ({len(lines)} 行)")
     print(f" 音色：{voice}")
     print(f" 语速：{args.speed}")
-    print(f" 共 {len(lines)} 行")
+    print(f" 输出：output/{chapter}/")
     print(f"─────────────────────────────────────")
 
     for i, line in enumerate(lines, start=1):
-        output_path = os.path.join(OUTPUT_DIR, f"{chapter_name}_line{i:03d}.mp3")
-
-        print(f"[{i}/{len(lines)}] {line}")
-
-        # 合成
+        output_path = os.path.join(output_dir, f"line{i:03d}.wav")
+        print(f"[{i:>3}/{len(lines)}] {line}")
         await synthesize_line(line, voice, args.speed, output_path)
 
-        # 播放
-        if not args.no_play:
-            play_audio(output_path)
-
     print(f"─────────────────────────────────────")
-    print(f"✅ 完成，音频保存在：{OUTPUT_DIR}/")
+    print(f"✅ 完成，WAV 文件保存在：output/{chapter}/")
 
 
 if __name__ == "__main__":
