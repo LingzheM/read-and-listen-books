@@ -5,6 +5,9 @@
   python play.py chapter-5
   python play.py chapter-5 --gap 1
   python play.py           # 不带参数时列出可用章节
+
+依赖：
+  pip install playsound==1.2.2
 """
 
 import os
@@ -12,20 +15,20 @@ import sys
 import time
 import glob
 import argparse
+from playsound import playsound
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 
 def list_chapters():
-    """列出 output/ 下所有已生成的章节"""
     dirs = sorted([
         d for d in os.listdir(OUTPUT_DIR)
         if os.path.isdir(os.path.join(OUTPUT_DIR, d))
     ]) if os.path.exists(OUTPUT_DIR) else []
 
     if not dirs:
-        print("[提示] output/ 目录下还没有任何章节，请先运行 main.py 生成")
+        print("[提示] output/ 下还没有任何章节，请先运行 main.py 生成")
     else:
         print("已生成章节：")
         for d in dirs:
@@ -47,23 +50,6 @@ def get_wav_files(chapter: str) -> list[str]:
         sys.exit(1)
 
     return files
-
-
-def play(path: str):
-    if sys.platform == "darwin":
-        os.system(f"afplay '{path}'")
-
-    elif sys.platform == "win32":
-        import winsound
-        winsound.PlaySound(path, winsound.SND_FILENAME)
-
-    else:
-        for player in ["aplay", "ffplay -nodisp -autoexit"]:
-            cmd = player.split()[0]
-            if os.system(f"which {cmd} > /dev/null 2>&1") == 0:
-                os.system(f"{player} '{path}' > /dev/null 2>&1")
-                return
-        print("[警告] 未找到可用播放器，请安装：sudo apt install alsa-utils")
 
 
 def format_time(seconds: float) -> str:
@@ -91,7 +77,7 @@ def main():
 
     for i, path in enumerate(files, start=1):
         print(f"[{i:>3}/{total}] {os.path.basename(path)}")
-        play(path)
+        playsound(path)  # 阻塞播放，播完再播下一句
         if args.gap > 0 and i < total:
             time.sleep(args.gap)
 
