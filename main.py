@@ -16,7 +16,7 @@ import re
 import edge_tts
 
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-SOURCES_DIR = os.path.join(BASE_DIR, "sources")
+SOURCES_DIR = os.path.join(BASE_DIR, "input")
 
 VOICES = {
     "nanami": "ja-JP-NanamiNeural",
