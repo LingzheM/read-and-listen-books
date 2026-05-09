@@ -1,20 +1,18 @@
 """
-TTS 生成器 - 支持中文和日语
+TTS 生成器
 
-目录结构：
-  input/<书名>/chapter_1.txt
-  input/<书名>/chapter_2.txt
-  output/<书名>/chapter_1/line001.mp3
-  output/<书名>/chapter_2/line001.mp3
+输入：input/<书名>/<part>/<chapter>/section.txt
+输出：output/<书名>/<part>/<chapter>/<section>/line001.wav
 
 用法：
-  python main.py <书名> <章节>
-  python main.py 活着 chapter_1
-  python main.py 活着 chapter_1 --voice yunyang
-  python main.py 活着 chapter_1 --speed +20%
-  python main.py 活着 chapter_1 --force
-  python main.py                    # 列出所有书名
-  python main.py 活着               # 列出该书所有章节
+  python main.py 活着 part_1 chapter_1 section_1
+  python main.py 活着 part_1 chapter_1 section_1 --voice yunyang
+  python main.py 活着 part_1 chapter_1 section_1 --speed +20%
+  python main.py 活着 part_1 chapter_1 section_1 --force
+  python main.py                                   # 列出所有书籍
+  python main.py 活着                              # 列出 part
+  python main.py 活着 part_1                       # 列出 chapter
+  python main.py 活着 part_1 chapter_1             # 列出 section
 """
 
 import asyncio
@@ -38,43 +36,29 @@ VOICES = {
 DEFAULT_VOICE = "yunxi"
 
 
-def list_books():
-    books = sorted([
-        d for d in os.listdir(INPUT_DIR)
-        if os.path.isdir(os.path.join(INPUT_DIR, d))
-    ]) if os.path.exists(INPUT_DIR) else []
-
-    if not books:
-        print("[提示] input/ 下还没有任何书籍目录")
-    else:
-        print("可用书籍：")
-        for b in books:
-            chapters = sorted([
-                os.path.splitext(f)[0]
-                for f in os.listdir(os.path.join(INPUT_DIR, b))
-                if f.endswith(".txt")
-            ])
-            print(f"  · {b}  ({len(chapters)} 章：{', '.join(chapters)})")
-    sys.exit(0)
-
-
-def list_chapters(book: str):
-    book_dir = os.path.join(INPUT_DIR, book)
-    if not os.path.exists(book_dir):
-        print(f"[错误] 找不到书籍：input/{book}/")
+def list_dir(path: str, label: str):
+    if not os.path.exists(path):
+        print(f"[错误] 路径不存在：{path}")
         sys.exit(1)
 
-    chapters = sorted([
+    items = sorted([
+        d for d in os.listdir(path)
+        if os.path.isdir(os.path.join(path, d))
+    ])
+
+    txts = sorted([
         os.path.splitext(f)[0]
-        for f in os.listdir(book_dir)
+        for f in os.listdir(path)
         if f.endswith(".txt")
     ])
-    if not chapters:
-        print(f"[提示] input/{book}/ 下还没有任何章节")
+
+    entries = items + txts
+    if not entries:
+        print(f"[提示] {path} 下没有内容")
     else:
-        print(f"《{book}》章节列表：")
-        for c in chapters:
-            print(f"  · {c}")
+        print(f"{label}：")
+        for e in entries:
+            print(f"  · {e}")
     sys.exit(0)
 
 
@@ -102,40 +86,43 @@ async def synthesize_line(text: str, voice: str, rate: str, output_path: str):
 
 async def main():
     parser = argparse.ArgumentParser(description="TTS 生成器")
-    parser.add_argument("book",    nargs="?",              help="书名，如 活着")
-    parser.add_argument("chapter", nargs="?",              help="章节名，如 chapter_1")
-    parser.add_argument("--voice", default=DEFAULT_VOICE,  help="音色：yunxi / yunyang / xiaoxiao / nanami / keita")
-    parser.add_argument("--speed", default="+0%",          help="语速，如 +20%% / -20%%")
-    parser.add_argument("--force", action="store_true",    help="强制重新生成已存在的文件")
+    parser.add_argument("book",    nargs="?", help="书名")
+    parser.add_argument("part",    nargs="?", help="part，如 part_1")
+    parser.add_argument("chapter", nargs="?", help="chapter，如 chapter_1")
+    parser.add_argument("section", nargs="?", help="section，如 section_1")
+    parser.add_argument("--voice", default=DEFAULT_VOICE, help="yunxi/yunyang/xiaoxiao/nanami/keita")
+    parser.add_argument("--speed", default="+0%",         help="语速，如 +20%%")
+    parser.add_argument("--force", action="store_true",   help="强制重新生成已存在文件")
     args = parser.parse_args()
 
     if not args.book:
-        list_books()
+        list_dir(INPUT_DIR, "可用书籍")
+
+    if not args.part:
+        list_dir(os.path.join(INPUT_DIR, args.book), f"《{args.book}》的 part")
 
     if not args.chapter:
-        list_chapters(args.book)
+        list_dir(os.path.join(INPUT_DIR, args.book, args.part), f"{args.part} 的 chapter")
 
-    book       = args.book
-    chapter    = args.chapter
-    input_path = os.path.join(INPUT_DIR, book, f"{chapter}.txt")
-    output_dir = os.path.join(OUTPUT_DIR, book, chapter)
+    if not args.section:
+        list_dir(os.path.join(INPUT_DIR, args.book, args.part, args.chapter), f"{args.chapter} 的 section")
+
+    input_path = os.path.join(INPUT_DIR, args.book, args.part, args.chapter, f"{args.section}.txt")
+    output_dir = os.path.join(OUTPUT_DIR, args.book, args.part, args.chapter, args.section)
     voice      = VOICES.get(args.voice, args.voice)
 
     os.makedirs(output_dir, exist_ok=True)
     lines = read_lines(input_path)
 
     print(f"─────────────────────────────────────")
-    print(f" 书名：{book}")
-    print(f" 章节：{chapter}  ({len(lines)} 行)")
-    print(f" 音色：{voice}")
-    print(f" 语速：{args.speed}")
-    print(f" 输出：output/{book}/{chapter}/")
+    print(f" {args.book} / {args.part} / {args.chapter} / {args.section}")
+    print(f" 共 {len(lines)} 行｜音色：{voice}｜语速：{args.speed}")
+    print(f" 输出：output/{args.book}/{args.part}/{args.chapter}/{args.section}/")
     print(f"─────────────────────────────────────")
 
     skipped = 0
     for i, line in enumerate(lines, start=1):
         output_path = os.path.join(output_dir, f"line{i:03d}.wav")
-
 
         if os.path.exists(output_path) and not args.force:
             print(f"[{i:>3}/{len(lines)}] 跳过（已存在）")
@@ -148,7 +135,7 @@ async def main():
     print(f"─────────────────────────────────────")
     if skipped:
         print(f"⏭  跳过 {skipped} 个，新生成 {len(lines) - skipped} 个")
-    print(f"✅ 完成：output/{book}/{chapter}/")
+    print(f"✅ 完成：output/{args.book}/{args.part}/{args.chapter}/{args.section}/")
 
 
 if __name__ == "__main__":
