@@ -134,7 +134,8 @@ async def main():
 
     skipped = 0
     for i, line in enumerate(lines, start=1):
-        output_path = os.path.join(output_dir, f"line{i:03d}.mp3")
+        output_path = os.path.join(output_dir, f"line{i:03d}.wav")
+
 
         if os.path.exists(output_path) and not args.force:
             print(f"[{i:>3}/{len(lines)}] 跳过（已存在）")

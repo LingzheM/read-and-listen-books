@@ -77,7 +77,7 @@ def list_chapters(book: str):
     else:
         print(f"《{book}》已生成章节：")
         for c in chapters:
-            count = len(glob.glob(os.path.join(book_dir, c, "*.mp3")))
+            count = len(glob.glob(os.path.join(book_dir, c, "*.wav")))
             print(f"  · {c}  ({count} 句)")
     sys.exit(0)
 
@@ -89,7 +89,7 @@ def get_audio_files(book: str, chapter: str) -> list[str]:
         print(f"       请先运行：python main.py {book} {chapter}")
         sys.exit(1)
 
-    files = sorted(glob.glob(os.path.join(directory, "*.mp3")))
+    files = sorted(glob.glob(os.path.join(directory, "*.wav")))
     if not files:
         print(f"[错误] output/{book}/{chapter}/ 下没有音频文件")
         sys.exit(1)
