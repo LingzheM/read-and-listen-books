@@ -1,5 +1,5 @@
 """
-章节合并工具 - 将一个 section 的所有 WAV 拼接成单个文件
+章节合并工具 - 将一个 section 的所有音频拼接成单个文件
 
 输出：output/<书名>/<part>/<chapter>/<section>.wav
 
@@ -14,7 +14,6 @@
 import os
 import sys
 import glob
-import wave
 import argparse
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -45,7 +44,7 @@ def merge(book: str, part: str, chapter: str, section: str):
     files = sorted(glob.glob(os.path.join(section_dir, "*.wav")))
 
     if not files:
-        print(f"[错误] {section_dir} 下没有 WAV 文件")
+        print(f"[错误] {section_dir} 下没有音频文件")
         sys.exit(1)
 
     output_path = os.path.join(OUTPUT_DIR, book, part, chapter, f"{section}.wav")
@@ -55,12 +54,12 @@ def merge(book: str, part: str, chapter: str, section: str):
     print(f" 输出：output/{book}/{part}/{chapter}/{section}.wav")
     print(f"─────────────────────────────────────")
 
-    with wave.open(output_path, "wb") as out:
+    # 直接拼接原始字节，Edge-TTS 输出的是 MP3 数据
+    # MP3 字节拼接完全合法，无质量损失
+    with open(output_path, "wb") as out:
         for i, path in enumerate(files):
-            with wave.open(path, "rb") as w:
-                if i == 0:
-                    out.setparams(w.getparams())
-                out.writeframes(w.readframes(w.getnframes()))
+            with open(path, "rb") as f:
+                out.write(f.read())
             print(f"[{i+1:>3}/{len(files)}] {os.path.basename(path)}")
 
     size_mb = os.path.getsize(output_path) / 1024 / 1024
