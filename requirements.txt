@@ -3,3 +3,5 @@ playsound==1.2.2
 kokoro
 soundfile
 pyopenjtalk
+misaki[ja]
+unidic
